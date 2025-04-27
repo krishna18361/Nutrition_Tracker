@@ -32,4 +32,4 @@ services:
         fromService:
           name: nutrack-api
           type: web
-          property: url 
+          property: host 
