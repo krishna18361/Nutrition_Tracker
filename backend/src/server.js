@@ -17,9 +17,17 @@ const nutritionRoutes = require('./routes/nutrition.routes');
 // Initialize app
 const app = express();
 
-// CORS configuration - More permissive to fix connection issues
+// CORS configuration for Render deployment
 app.use(cors({
-  origin: true, // Allow all origins temporarily to troubleshoot
+  origin: [
+    'https://nutrack.onrender.com', 
+    'https://nutrack-api.onrender.com',
+    'http://localhost:5173',
+    'http://localhost:5174',
+    'http://localhost:5175',
+    'http://localhost:5176',
+    'http://localhost:5177'
+  ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
@@ -29,10 +37,19 @@ app.use(cors({
 app.use(express.json());
 app.use(morgan('dev'));
 
-// Connect to MongoDB
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/nutrack')
-  .then(() => console.log('MongoDB connected successfully'))
-  .catch((err) => console.error('MongoDB connection error:', err));
+// Connect to MongoDB with retry logic
+const connectDB = async () => {
+  try {
+    await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/nutrack');
+    console.log('MongoDB connected successfully');
+  } catch (err) {
+    console.error('MongoDB connection error:', err);
+    console.log('Retrying connection in 5 seconds...');
+    setTimeout(connectDB, 5000);
+  }
+};
+
+connectDB();
 
 // Routes
 app.use('/api/auth', authRoutes);
@@ -63,11 +80,17 @@ app.get('/api/health', (req, res) => {
 
 // Serve static assets in production
 if (process.env.NODE_ENV === 'production') {
-  // Set static folder
-  app.use(express.static(path.join(__dirname, '../../build')));
+  // Set static folder - path depends on your build process
+  const staticPath = path.join(__dirname, '../../../dist');
+  console.log('Serving static files from:', staticPath);
+  app.use(express.static(staticPath));
 
   app.get('*', (req, res) => {
-    res.sendFile(path.resolve(__dirname, '../../build', 'index.html'));
+    // Don't serve HTML for API routes
+    if (req.url.startsWith('/api')) {
+      return res.status(404).json({ error: 'API endpoint not found' });
+    }
+    res.sendFile(path.resolve(staticPath, 'index.html'));
   });
 }
 
